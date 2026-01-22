@@ -38,17 +38,46 @@ function App() {
 
     const handleFetchData = async () => {
         setLoading(true);
-        setStatus({ type: "info", message: "正在获取数据..." });
+        setStatus({ type: "info", message: "正在提交数据获取任务..." });
         try {
             const res = await axios.post(`${API_URL}/data/fetch`);
             setStatus({ type: "success", message: res.data.message });
-            addHistory("Fetch Data", "Success");
+            addHistory("Fetch Data", "Started");
+
+            // 开始轮询数据获取进度
+            pollFetchStatus();
         } catch (error) {
             setStatus({ type: "error", message: error.message });
             addHistory("Fetch Data", "Failed");
-        } finally {
             setLoading(false);
         }
+    };
+
+    const pollFetchStatus = () => {
+        const interval = setInterval(async () => {
+            try {
+                const res = await axios.get(`${API_URL}/data/fetch/status`);
+                const { status, progress, message } = res.data;
+
+                setStatus({ type: "info", message: `数据获取中: ${message} (${progress}%)` });
+
+                if (status === "completed") {
+                    clearInterval(interval);
+                    setLoading(false);
+                    setStatus({ type: "success", message: "数据获取任务完成" });
+                    addHistory("Fetch Data", "Success");
+                } else if (status === "error") {
+                    clearInterval(interval);
+                    setLoading(false);
+                    setStatus({ type: "error", message: `数据获取失败: ${message}` });
+                    addHistory("Fetch Data", "Failed");
+                }
+            } catch (error) {
+                console.error("Poll fetch status failed:", error);
+                clearInterval(interval);
+                setLoading(false);
+            }
+        }, 1000);
     };
 
     const handleTrain = async () => {

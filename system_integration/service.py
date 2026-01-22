@@ -19,23 +19,30 @@ class TradingSystem:
         self.pipeline = DataPipeline()
         self.model_selector = ModelSelector()
 
-    def fetch_and_process_data(self):
+    def fetch_and_process_data(self, progress_callback=None):
         """
         获取并处理数据
+        :param progress_callback: 进度回调函数，接收(progress, message)参数
         """
         # 1. 获取数据
+        if progress_callback: progress_callback(20, "正在从交易所获取数据...")
         df = self.fetcher.fetch_data()
         if df.empty:
             return None
         
         # 保存原始数据
+        if progress_callback: progress_callback(40, "数据获取完成，正在保存原始数据...")
         self.fetcher.save_to_csv(df, "raw_data.csv")
         
         # 2. 处理数据
+        if progress_callback: progress_callback(60, "正在进行数据清洗...")
         df_processed = self.pipeline.run(df)
         
         # 保存处理后数据
+        if progress_callback: progress_callback(80, "数据处理完成，正在保存处理后数据...")
         self.fetcher.save_to_csv(df_processed, "processed_data.csv")
+        
+        if progress_callback: progress_callback(100, "数据获取和处理完成")
         return df_processed
 
     def train_task(self, model_type='lstm', task_type='prediction', epochs=10, lr=0.001, dropout=0.2, n_estimators=100, progress_callback=None):

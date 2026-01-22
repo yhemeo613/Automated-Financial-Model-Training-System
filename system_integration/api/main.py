@@ -44,13 +44,54 @@ async def fetch_data(background_tasks: BackgroundTasks):
     """
     触发数据抓取任务 (后台运行)
     """
-    background_tasks.add_task(system.fetch_and_process_data)
+    if task_status["data_fetch"]["status"] == "running":
+        raise HTTPException(status_code=400, detail="数据抓取任务正在进行中")
+
+    # 简单的包装函数以便放入后台任务
+    def run_fetch_data():
+        task_status["data_fetch"]["status"] = "running"
+        task_status["data_fetch"]["progress"] = 0
+        task_status["data_fetch"]["message"] = "开始数据抓取..."
+        
+        try:
+            # 传递回调函数更新进度
+            def progress_callback(progress, message):
+                task_status["data_fetch"]["progress"] = progress
+                task_status["data_fetch"]["message"] = message
+                
+            result = system.fetch_and_process_data(progress_callback=progress_callback)
+            
+            if result is not None:
+                task_status["data_fetch"]["status"] = "completed"
+                task_status["data_fetch"]["progress"] = 100
+                task_status["data_fetch"]["message"] = "数据抓取完成"
+            else:
+                task_status["data_fetch"]["status"] = "error"
+                task_status["data_fetch"]["message"] = "数据抓取失败"
+                
+        except Exception as e:
+            task_status["data_fetch"]["status"] = "error"
+            task_status["data_fetch"]["message"] = str(e)
+
+    background_tasks.add_task(run_fetch_data)
     return {"message": "数据抓取任务已启动"}
+
+@app.get("/api/data/fetch/status")
+async def get_fetch_status():
+    """
+    获取数据抓取任务状态
+    """
+    return task_status["data_fetch"]
 
 # 全局变量存储任务状态
 # 实际生产中应使用 Redis 或数据库
 task_status = {
     "train": {
+        "status": "idle", # idle, running, completed, error
+        "progress": 0,
+        "message": ""
+    },
+    "data_fetch": {
         "status": "idle", # idle, running, completed, error
         "progress": 0,
         "message": ""

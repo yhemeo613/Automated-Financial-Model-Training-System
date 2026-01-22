@@ -107,10 +107,131 @@ class LSTMModel(BaseModel):
         return mean_pred, std_pred
 
     def save(self, path):
-        torch.save(self.model.state_dict(), path)
+        """
+        保存模型，包括权重和配置
+        :param path: 模型文件路径
+        """
+        # 保存模型配置和权重
+        model_data = {
+            'config': {
+                'input_dim': self.input_dim,
+                'hidden_dim': self.hidden_dim,
+                'output_dim': self.output_dim,
+                'num_layers': self.num_layers,
+                'dropout': self.dropout
+            },
+            'state_dict': self.model.state_dict()
+        }
+        torch.save(model_data, path)
         print(f"模型已保存至 {path}")
 
     def load(self, path):
-        self.model.load_state_dict(torch.load(path))
-        self.model.to(self.device)
-        print(f"模型已从 {path} 加载")
+        """
+        加载模型，支持加载不同结构的模型
+        :param path: 模型文件路径
+        """
+        try:
+            # 加载模型数据
+            model_data = torch.load(path)
+            
+            # 检查是否包含配置信息
+            if 'config' in model_data and 'state_dict' in model_data:
+                print("检测到完整模型数据，包括配置和权重")
+                
+                # 使用保存的配置重新初始化模型
+                config = model_data['config']
+                print(f"使用保存的配置重新初始化模型: {config}")
+                
+                # 重新创建模型
+                self.model = LSTMNet(
+                    input_dim=config['input_dim'],
+                    hidden_dim=config['hidden_dim'],
+                    output_dim=config['output_dim'],
+                    num_layers=config['num_layers'],
+                    dropout_prob=config['dropout']
+                ).to(self.device)
+                
+                # 更新实例属性
+                self.input_dim = config['input_dim']
+                self.hidden_dim = config['hidden_dim']
+                self.output_dim = config['output_dim']
+                self.num_layers = config['num_layers']
+                self.dropout = config['dropout']
+                
+                # 加载权重
+                self.model.load_state_dict(model_data['state_dict'])
+                print(f"模型已从 {path} 加载 (使用保存的配置)")
+                return
+            else:
+                # 兼容旧版本模型文件（仅包含权重）
+                print("检测到旧版本模型文件，仅包含权重")
+                state_dict = model_data
+        except Exception as e:
+            print(f"加载模型数据失败: {e}")
+            print("尝试作为纯权重文件加载...")
+            # 尝试作为纯权重文件加载
+            state_dict = torch.load(path)
+        
+        # 旧版本模型文件处理
+        try:
+            # 尝试严格加载权重
+            self.model.load_state_dict(state_dict, strict=False)
+            self.model.to(self.device)
+            print(f"模型已从 {path} 加载 (使用 strict=False)")
+        except Exception as e:
+            print(f"严格加载模型失败: {e}")
+            print("尝试使用兼容模式加载...")
+            
+            # 检查模型结构差异
+            current_state = self.model.state_dict()
+            loaded_state = state_dict
+            
+            # 打印结构差异
+            print("\n当前模型结构:")
+            for name, param in current_state.items():
+                print(f"  {name}: {param.shape}")
+            
+            print("\n加载的模型结构:")
+            for name, param in loaded_state.items():
+                print(f"  {name}: {param.shape}")
+            
+            # 分析模型配置
+            print("\n分析模型配置...")
+            
+            # 从权重形状推断隐藏层大小和层数
+            # LSTM权重形状: (4*hidden_dim, input_dim) 或 (4*hidden_dim, hidden_dim)
+            inferred_config = {}
+            
+            # 尝试推断隐藏层大小
+            if 'lstm.weight_ih_l0' in loaded_state:
+                # 4*hidden_dim = weight_ih_l0.shape[0]
+                inferred_hidden_dim = loaded_state['lstm.weight_ih_l0'].shape[0] // 4
+                inferred_config['hidden_dim'] = inferred_hidden_dim
+                print(f"推断隐藏层大小: {inferred_hidden_dim}")
+            
+            # 尝试推断层数
+            max_layer = -1
+            for key in loaded_state:
+                if key.startswith('lstm.weight_ih_l'):
+                    layer = int(key.split('_l')[-1])
+                    max_layer = max(max_layer, layer)
+            inferred_config['num_layers'] = max_layer + 1
+            print(f"推断层数: {inferred_config['num_layers']}")
+            
+            # 重新创建模型
+            print(f"使用推断配置重新初始化模型: {inferred_config}")
+            self.model = LSTMNet(
+                input_dim=self.input_dim,
+                hidden_dim=inferred_config.get('hidden_dim', 64),
+                output_dim=self.output_dim,
+                num_layers=inferred_config.get('num_layers', 2),
+                dropout_prob=self.dropout
+            ).to(self.device)
+            
+            # 更新实例属性
+            self.hidden_dim = inferred_config.get('hidden_dim', 64)
+            self.num_layers = inferred_config.get('num_layers', 2)
+            
+            # 再次尝试加载权重
+            self.model.load_state_dict(loaded_state, strict=False)
+            print(f"模型已从 {path} 加载 (使用推断配置)")
