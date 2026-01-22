@@ -27,5 +27,14 @@ class DataPipeline:
         # 4. 情绪因子
         df = self.engineer.add_sentiment_score(df)
         
+        # 5. 波动率特征
+        df = self.engineer.add_volatility_features(df)
+        
+        # 6. 微观结构特征
+        df = self.engineer.add_microstructure_features(df)
+        
+        # 7. 清除最终的NaN值
+        df = df.dropna()
+        
         print(f"数据处理完成，最终维度: {df.shape}")
         return df

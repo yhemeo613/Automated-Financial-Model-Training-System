@@ -5,31 +5,66 @@ import numpy as np
 from models.base import BaseModel
 import os
 
+class Attention(nn.Module):
+    def __init__(self, hidden_dim):
+        super(Attention, self).__init__()
+        # 注意力机制
+        self.attention = nn.Linear(hidden_dim, 1)
+        self.softmax = nn.Softmax(dim=1)
+    
+    def forward(self, lstm_output):
+        # lstm_output: (batch_size, seq_len, hidden_dim)
+        # 计算注意力权重
+        attention_weights = self.attention(lstm_output)
+        attention_weights = self.softmax(attention_weights)
+        
+        # 加权求和
+        context_vector = torch.sum(attention_weights * lstm_output, dim=1)
+        
+        return context_vector, attention_weights
+
 class LSTMNet(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, dropout_prob=0.0):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers, dropout_prob=0.0, use_attention=True):
         super(LSTMNet, self).__init__()
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
+        self.use_attention = use_attention
         
-        # 增加 Dropout 层
+        # LSTM层
         self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True, dropout=dropout_prob if num_layers > 1 else 0)
         self.dropout = nn.Dropout(dropout_prob)
-        self.fc = nn.Linear(hidden_dim, output_dim)
+        
+        # 注意力层
+        if self.use_attention:
+            self.attention = Attention(hidden_dim)
+            # 全连接层（使用注意力时，输入是hidden_dim）
+            self.fc = nn.Linear(hidden_dim, output_dim)
+        else:
+            # 全连接层（不使用注意力时，输入是hidden_dim）
+            self.fc = nn.Linear(hidden_dim, output_dim)
         
     def forward(self, x):
         h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).to(x.device)
         c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).to(x.device)
         
+        # LSTM输出: (batch_size, seq_len, hidden_dim)
         out, _ = self.lstm(x, (h0, c0))
-        # 取最后一个时间步的输出
-        out = self.dropout(out[:, -1, :])
-        out = self.fc(out)
+        out = self.dropout(out)
+        
+        if self.use_attention:
+            # 使用注意力机制
+            context_vector, attention_weights = self.attention(out)
+            out = self.fc(context_vector)
+        else:
+            # 取最后一个时间步的输出
+            out = self.fc(out[:, -1, :])
+        
         return out
 
 class LSTMModel(BaseModel):
-    def __init__(self, input_dim, hidden_dim=64, output_dim=1, num_layers=2, lr=0.001, epochs=50, dropout=0.2, weight_decay=0.01):
+    def __init__(self, input_dim, hidden_dim=64, output_dim=1, num_layers=2, lr=0.001, epochs=50, dropout=0.2, weight_decay=0.01, use_attention=True):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.model = LSTMNet(input_dim, hidden_dim, output_dim, num_layers, dropout_prob=dropout).to(self.device)
+        self.model = LSTMNet(input_dim, hidden_dim, output_dim, num_layers, dropout_prob=dropout, use_attention=use_attention).to(self.device)
         self.criterion = nn.MSELoss()
         # 引入 L2 正则化 (weight_decay)
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr, weight_decay=weight_decay)
@@ -39,6 +74,7 @@ class LSTMModel(BaseModel):
         self.output_dim = output_dim
         self.num_layers = num_layers
         self.dropout = dropout
+        self.use_attention = use_attention
         
     def train(self, X_train, y_train, X_val=None, y_val=None, progress_callback=None):
         self.model.train()
@@ -118,7 +154,8 @@ class LSTMModel(BaseModel):
                 'hidden_dim': self.hidden_dim,
                 'output_dim': self.output_dim,
                 'num_layers': self.num_layers,
-                'dropout': self.dropout
+                'dropout': self.dropout,
+                'use_attention': self.use_attention
             },
             'state_dict': self.model.state_dict()
         }
@@ -148,7 +185,8 @@ class LSTMModel(BaseModel):
                     hidden_dim=config['hidden_dim'],
                     output_dim=config['output_dim'],
                     num_layers=config['num_layers'],
-                    dropout_prob=config['dropout']
+                    dropout_prob=config['dropout'],
+                    use_attention=config.get('use_attention', True)
                 ).to(self.device)
                 
                 # 更新实例属性
@@ -157,6 +195,7 @@ class LSTMModel(BaseModel):
                 self.output_dim = config['output_dim']
                 self.num_layers = config['num_layers']
                 self.dropout = config['dropout']
+                self.use_attention = config.get('use_attention', True)
                 
                 # 加载权重
                 self.model.load_state_dict(model_data['state_dict'])
@@ -218,6 +257,11 @@ class LSTMModel(BaseModel):
             inferred_config['num_layers'] = max_layer + 1
             print(f"推断层数: {inferred_config['num_layers']}")
             
+            # 尝试推断是否使用注意力机制
+            has_attention = any('attention' in key for key in loaded_state)
+            inferred_config['use_attention'] = has_attention
+            print(f"推断是否使用注意力机制: {has_attention}")
+            
             # 重新创建模型
             print(f"使用推断配置重新初始化模型: {inferred_config}")
             self.model = LSTMNet(
@@ -225,12 +269,14 @@ class LSTMModel(BaseModel):
                 hidden_dim=inferred_config.get('hidden_dim', 64),
                 output_dim=self.output_dim,
                 num_layers=inferred_config.get('num_layers', 2),
-                dropout_prob=self.dropout
+                dropout_prob=self.dropout,
+                use_attention=inferred_config.get('use_attention', True)
             ).to(self.device)
             
             # 更新实例属性
             self.hidden_dim = inferred_config.get('hidden_dim', 64)
             self.num_layers = inferred_config.get('num_layers', 2)
+            self.use_attention = inferred_config.get('use_attention', True)
             
             # 再次尝试加载权重
             self.model.load_state_dict(loaded_state, strict=False)

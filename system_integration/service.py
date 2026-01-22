@@ -93,9 +93,14 @@ class TradingSystem:
         if len(X) == 0:
              return {"status": "error", "message": "数据量不足以创建窗口"}
 
-        # 使用 TimeSeriesSplit 进行交叉验证
-        # n_splits = 5 (保留最后一部分作为最终测试)
-        tscv = TimeSeriesSplit(n_splits=3) # 减少分割数以加快演示速度
+        # 使用滚动窗口验证 (Walk-Forward Validation) 进行交叉验证
+        # 滚动窗口参数设置
+        train_window_size = int(len(X) * 0.7)  # 初始训练窗口大小（占总数据的70%）
+        val_window_size = int(len(X) * 0.1)    # 验证窗口大小（占总数据的10%）
+        step_size = val_window_size            # 滚动步长（与验证窗口大小相同）
+        
+        # 计算总窗口数
+        total_windows = (len(X) - train_window_size - val_window_size) // step_size + 1
         
         best_loss = float('inf')
         best_model = None
@@ -104,17 +109,22 @@ class TradingSystem:
         # 简单的 Grid Search (针对 LSTM)
         # 实际生产中应更复杂，这里仅演示原理
         if model_type == 'lstm':
-            grid_params = [{'hidden_dim': 32, 'num_layers': 1}, {'hidden_dim': 64, 'num_layers': 2}]
+            grid_params = [
+                {'hidden_dim': 32, 'num_layers': 1, 'use_attention': True},
+                {'hidden_dim': 64, 'num_layers': 2, 'use_attention': True},
+                {'hidden_dim': 64, 'num_layers': 1, 'use_attention': False}
+            ]
         else:
             grid_params = [{}] # 其他模型暂不搜索
             
-        total_steps = len(grid_params) * 3 # splits
+        total_steps = len(grid_params) * total_windows
         current_step = 0
         
-        if progress_callback: progress_callback(15, "开始交叉验证与网格搜索...")
+        if progress_callback: progress_callback(15, f"开始滚动窗口验证与网格搜索...总窗口数: {total_windows}")
         
         for params in grid_params:
-            fold_losses = []
+            window_losses = []
+            
             # 每一组参数都需要实例化一个模型
             # 注意：Ensemble 模型本身包含多个子模型，这里不再对 Ensemble 做 Grid Search，而是直接训练
             if model_type == 'ensemble':
@@ -123,14 +133,26 @@ class TradingSystem:
             else:
                 model = self.model_selector.get_model(task_type, model_type, input_dim=input_dim, epochs=epochs, lr=lr, dropout=dropout, n_estimators=n_estimators, **params)
             
-            for train_index, val_index in tscv.split(X):
+            # 滚动窗口验证
+            for i in range(total_windows):
                 current_step += 1
                 progress = 15 + int((current_step / total_steps) * 60)
                 if progress_callback: 
-                    progress_callback(progress, f"正在验证参数 {params} (Fold {current_step % 3 + 1})...")
+                    progress_callback(progress, f"正在验证参数 {params} (窗口 {i+1}/{total_windows})...")
                 
-                X_train_fold, X_val_fold = X[train_index], X[val_index]
-                y_train_fold, y_val_fold = y[train_index], y[val_index]
+                # 计算当前窗口的索引
+                train_start = i * step_size
+                train_end = train_start + train_window_size
+                val_start = train_end
+                val_end = val_start + val_window_size
+                
+                # 获取训练集和验证集
+                X_train_fold, X_val_fold = X[train_start:train_end], X[val_start:val_end]
+                y_train_fold, y_val_fold = y[train_start:train_end], y[val_start:val_end]
+                
+                # 检查数据量
+                if len(X_train_fold) == 0 or len(X_val_fold) == 0:
+                    break
                 
                 # 训练
                 try:
@@ -144,14 +166,15 @@ class TradingSystem:
                     y_val_fold = y_val_fold.reshape(-1)
                     
                     mse = mean_squared_error(y_val_fold, pred)
-                    fold_losses.append(mse)
+                    window_losses.append(mse)
+                    print(f"  窗口 {i+1}: MSE = {mse:.6f}")
                     
                 except Exception as e:
-                    print(f"训练 Fold 失败: {e}")
-                    fold_losses.append(float('inf'))
+                    print(f"训练窗口 {i+1} 失败: {e}")
+                    window_losses.append(float('inf'))
             
-            avg_loss = np.mean(fold_losses)
-            print(f"参数 {params} 平均验证 Loss: {avg_loss}")
+            avg_loss = np.mean(window_losses)
+            print(f"参数 {params} 平均验证 Loss: {avg_loss:.6f}")
             
             if avg_loss < best_loss:
                 best_loss = avg_loss
@@ -415,34 +438,28 @@ class TradingSystem:
         except:
             recent_volatility = 0.01
             close_idx = 0
-
+        
+        # 对于未来趋势预测，使用确定性的predict方法，确保结果可重复
         for i in range(future_steps):
-            # 预测下一步
-            if hasattr(model, 'predict_with_uncertainty'):
-                # 注意：自回归中不确定性会累积，这里简化处理，仅计算单步不确定性
-                # 实际上应该随着步数增加扩大置信区间
-                next_mean, next_std = model.predict_with_uncertainty(current_input)
-                next_val = next_mean.flatten()[0]
-                uncertainty = next_std.flatten()[0] * (1 + i * 0.05) # 随时间扩大不确定性
-            else:
-                next_pred = model.predict(current_input)
-                next_val = next_pred.flatten()[0]
-                uncertainty = recent_volatility # 使用历史波动率作为不确定性估计
+            # 预测下一步，始终使用确定性的predict方法
+            next_pred = model.predict(current_input)
+            next_val = next_pred.flatten()[0]
             
-            # 添加微小随机扰动
-            noise = np.random.normal(0, recent_volatility * 0.5)
-            next_val_noisy = next_val + noise
-            next_val_noisy = np.clip(next_val_noisy, 0, 1)
+            # 使用历史波动率作为不确定性估计
+            uncertainty = recent_volatility * (1 + i * 0.05) # 随时间扩大不确定性
             
-            future_predictions.append(next_val_noisy)
+            # 确保值在合理范围内
+            next_val = np.clip(next_val, 0, 1)
+            
+            future_predictions.append(next_val)
             
             # 计算置信区间
-            future_upper.append(next_val_noisy + 1.645 * uncertainty)
-            future_lower.append(next_val_noisy - 1.645 * uncertainty)
+            future_upper.append(next_val + 1.645 * uncertainty)
+            future_lower.append(next_val - 1.645 * uncertainty)
             
             # 更新输入窗口
             next_features = current_input[0, -1, :].copy()
-            next_features[close_idx] = next_val_noisy
+            next_features[close_idx] = next_val
             
             # 滚动窗口
             new_window = np.concatenate([current_input[:, 1:, :], next_features.reshape(1, 1, input_dim)], axis=1)
@@ -465,9 +482,57 @@ class TradingSystem:
         mape = np.mean(np.abs((y_test_original - predictions_test_original) / y_test_original))
         confidence = max(0, 1 - mape)
         
+        # 7. 模型可解释性分析
+        explainability = {}
+        
+        # 特征重要性分析 (简单版本)
+        try:
+            # 对于LSTM模型，我们可以分析输入特征的重要性
+            # 这里使用一种简单的方法：计算每个特征对预测结果的敏感性
+            if model_type == 'lstm':
+                # 计算特征重要性
+                feature_importance = {}
+                
+                # 使用最后一个测试样本作为基准
+                base_sample = X_test[-1:]
+                base_pred = model.predict(base_sample)[0][0]
+                
+                # 对每个特征进行敏感性分析
+                for i, feature in enumerate(feature_cols):
+                    # 创建扰动样本
+                    perturbed_sample = base_sample.copy()
+                    # 对特征值进行10%的扰动
+                    perturbed_sample[0, :, i] *= 1.1
+                    # 计算扰动后的预测
+                    perturbed_pred = model.predict(perturbed_sample)[0][0]
+                    # 计算敏感性（相对变化）
+                    sensitivity = abs((perturbed_pred - base_pred) / base_pred)
+                    feature_importance[feature] = float(sensitivity)
+                
+                # 按重要性排序
+                sorted_importance = dict(sorted(feature_importance.items(), key=lambda x: x[1], reverse=True))
+                explainability['feature_importance'] = sorted_importance
+                explainability['top_features'] = list(sorted_importance.keys())[:5]
+                
+            # 对于随机森林模型，可以直接获取特征重要性
+            elif model_type == 'rf':
+                # 注意：这里需要确保模型有feature_importances_属性
+                if hasattr(model.model, 'feature_importances_'):
+                    feature_importance = {}
+                    for i, feature in enumerate(feature_cols):
+                        feature_importance[feature] = float(model.model.feature_importances_[i])
+                    
+                    # 按重要性排序
+                    sorted_importance = dict(sorted(feature_importance.items(), key=lambda x: x[1], reverse=True))
+                    explainability['feature_importance'] = sorted_importance
+                    explainability['top_features'] = list(sorted_importance.keys())[:5]
+        except Exception as e:
+            print(f"可解释性分析失败: {e}")
+            explainability['error'] = str(e)
+        
         duration = time.time() - start_time
         
-        # 7. 格式化结果
+        # 8. 格式化结果
         result_data = []
         
         # 历史回测部分
@@ -504,6 +569,7 @@ class TradingSystem:
                     "mse": float(mse),
                     "drift_detected": bool(drift_detected),
                     "drift_msg": drift_msg
-                }
+                },
+                "explainability": explainability
             }
         }
