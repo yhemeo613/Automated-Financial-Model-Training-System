@@ -1,0 +1,24 @@
+# 排除 node_modules 目录
+node_modules/
+
+# 排除构建产物目录
+dist/
+
+# 排除日志文件
+logs/
+*.log
+
+# 排除环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 排除 IDE 配置文件
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 排除操作系统文件
+.DS_Store
+Thumbs.db
