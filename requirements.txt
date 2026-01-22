@@ -1,0 +1,13 @@
+ccxt
+pandas
+numpy
+scikit-learn
+torch
+xgboost
+fastapi
+uvicorn
+ta
+python-dotenv
+apscheduler
+pydantic
+requests

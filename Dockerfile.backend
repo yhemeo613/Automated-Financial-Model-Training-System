@@ -1,0 +1,28 @@
+# 使用官方 Python 3.10 镜像作为基础镜像
+FROM python:3.10-slim
+
+# 设置工作目录
+WORKDIR /app
+
+# 设置环境变量
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# 安装系统依赖 (如果需要)
+# RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev && rm -rf /var/lib/apt/lists/*
+
+# 复制依赖文件
+COPY requirements.txt .
+
+# 安装 Python 依赖
+# 注意：如果项目中使用了 torch (pytorch)，建议使用 --extra-index-url 指定 cpu 版本以减小镜像体积
+RUN pip install --no-cache-dir -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+
+# 复制项目代码
+COPY . .
+
+# 暴露端口
+EXPOSE 8000
+
+# 启动命令
+CMD ["uvicorn", "system_integration.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

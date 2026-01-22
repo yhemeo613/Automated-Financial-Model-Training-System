@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  # 后端服务 (FastAPI)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: trading-system-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      # 挂载 data 目录以持久化模型文件和数据
+      - ./data:/app/data
+      # 挂载源代码以便开发调试 (可选)
+      # - .:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # 前端服务 (React + Nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: trading-system-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    restart: unless-stopped
+
+networks:
+  app-network:
+    driver: bridge

@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+pnpm-debug.log*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project Data
+data/
+raw_data.csv
+processed_data.csv
+*.pkl
+*.pth
+scaler.pkl
+
+# Docker
+docker-compose.yml
+Dockerfile*
+.dockerignore
+
+# Build
+dist/
+build/
+coverage/
