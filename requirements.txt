@@ -1,13 +1,20 @@
-ccxt
-pandas
-numpy
-scikit-learn
-torch
-xgboost
-fastapi
-uvicorn
-ta
-python-dotenv
-apscheduler
-pydantic
-requests
+# 核心依赖
+ccxt==4.3.54
+pandas==2.2.3
+numpy==1.26.4
+scikit-learn==1.4.2
+
+# 机器学习框架
+torch==2.3.1
+xgboost==2.1.1
+
+# Web服务
+fastapi==0.111.0
+uvicorn==0.30.1
+pydantic==2.7.4
+
+# 辅助库
+ta==0.10.3
+python-dotenv==1.0.1
+apscheduler==3.10.4
+requests==2.32.3

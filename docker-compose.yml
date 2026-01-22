@@ -4,6 +4,7 @@ services:
         build:
             context: .
             dockerfile: Dockerfile.backend
+            network: host
         container_name: trading-system-backend
         ports:
             - "8000:8000"
@@ -14,6 +15,9 @@ services:
             # - .:/app
         environment:
             - PYTHONUNBUFFERED=1
+            - HTTP_PROXY=http://host.docker.internal:7890
+            - HTTPS_PROXY=http://host.docker.internal:7890
+            - NO_PROXY=localhost,127.0.0.1,app-network
         networks:
             - app-network
         restart: unless-stopped
@@ -23,11 +27,16 @@ services:
         build:
             context: ./frontend
             dockerfile: Dockerfile
+            network: host
         container_name: trading-system-frontend
         ports:
             - "80:80"
         depends_on:
             - backend
+        environment:
+            - HTTP_PROXY=http://host.docker.internal:7890
+            - HTTPS_PROXY=http://host.docker.internal:7890
+            - NO_PROXY=localhost,127.0.0.1,app-network
         networks:
             - app-network
         restart: unless-stopped

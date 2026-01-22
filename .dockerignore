@@ -1,46 +1,48 @@
-# Git
-.git
-.gitignore
-
-# Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
+# 排除Python虚拟环境
 venv/
-.env
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
+env/
 
-# Node.js
-node_modules/
-npm-debug.log
-yarn-error.log
-pnpm-debug.log*
-
-# IDEs
+# 排除IDE配置文件
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# Project Data
+# 排除操作系统文件
+.DS_Store
+Thumbs.db
+
+# 排除日志文件
+logs/
+*.log
+
+# 排除测试文件
+__pycache__/
+*.pyc
+*.pyo
+
+# 排除数据文件（如果有的话）
 data/
-raw_data.csv
-processed_data.csv
-*.pkl
-*.pth
-scaler.pkl
+*.csv
+*.xlsx
+*.json
 
-# Docker
-docker-compose.yml
-Dockerfile*
-.dockerignore
-
-# Build
+# 排除构建输出
 dist/
 build/
-coverage/
+*.egg-info/
+
+# 排除环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 排除Docker相关文件
+Dockerfile
+.dockerignore
+
+# 排除其他不必要的文件
+README.md
+LICENSE
+requirements-dev.txt
