@@ -2,6 +2,8 @@
 
 # 自动化金融模型训练系统
 
+![Dashboard Preview](assets/preview.png)
+
 ## 📖 Introduction / 项目简介
 
 This is an enterprise-grade automated financial model training and prediction system designed for quantitative trading and risk management. It integrates a modern React frontend with a robust FastAPI backend, leveraging advanced machine learning (Random Forest) and deep learning (LSTM) algorithms to analyze financial data, predict market trends, and assess risks.
@@ -35,7 +37,38 @@ This is an enterprise-grade automated financial model training and prediction sy
 - **Backend / 后端**: Python, FastAPI, Uvicorn, Pandas, Scikit-learn, PyTorch
 - **Infrastructure / 基础设施**: Docker, Docker Compose, Nginx
 
-## 🚀 Getting Started / 快速开始
+## � Data Source & Configuration / 数据源与配置
+
+### Data Source / 数据来源
+
+The system fetches real-time and historical financial data from **Binance** (world's leading cryptocurrency exchange). The data pipeline handles:
+
+- Market data acquisition (Kline/Candlestick data)
+- Technical indicator calculation (MA, RSI, MACD, Bollinger Bands)
+- Data cleaning and normalization
+
+本系统的数据来源于 **Binance (币安)** 交易所。数据管道负责处理：
+
+- 市场行情数据获取 (K线数据)
+- 技术指标计算 (MA, RSI, MACD, 布林带等)
+- 数据清洗与归一化
+
+### Environment Configuration / 环境配置
+
+To access the data source, you need to configure your API keys in a `.env` file at the project root.
+为了访问数据源，您需要在项目根目录创建一个 `.env` 文件并配置 API 密钥。
+
+**Example `.env` file / `.env` 文件示例**:
+
+```env
+BINANCE_API_KEY=your_api_key_here
+BINANCE_SECRET_KEY=your_secret_key_here
+```
+
+_Note: Ensure your API keys have read-only permissions for security._
+_注意：请确保您的 API 密钥仅拥有只读权限以保证安全。_
+
+## �🚀 Getting Started / 快速开始
 
 ### Prerequisites / 前置要求
 
