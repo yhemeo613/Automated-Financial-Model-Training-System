@@ -133,6 +133,15 @@ npm run dev
 | **N Estimators**       | Number of trees in the forest | 100     | Random Forest, Ensemble |
 | **Days**               | Prediction horizon            | 30      | All                     |
 
+## 下一阶段优化方向
+
+1. 高级模型架构 ：引入Transformer、Temporal Fusion Transformer等更先进的模型
+2. 强化学习集成 ：结合强化学习进行动态决策和风险管理
+3. 多资产联动分析 ：添加多资产相关性分析和联动预测
+4. 实时数据处理 ：优化数据处理流程，支持实时数据更新
+5. 高级风险控制 ：添加动态止损、仓位管理和风险预算分配
+6. 模型监控与更新 ：实现模型性能监控和自动更新机制
+
 ## 🛡️ License / 许可证
 
 This project is licensed under the MIT License. See the LICENSE file for details.
